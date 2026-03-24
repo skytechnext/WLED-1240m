@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1240m LED Cove Light — Wave Pattern Control</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; color: #1a1a1a; line-height: 1.7; padding: 24px; }
+  .container { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 28px; color: #1B5E8C; margin-bottom: 4px; }
+  h2 { font-size: 22px; color: #1B5E8C; margin: 36px 0 12px; border-bottom: 2px solid #1B5E8C; padding-bottom: 6px; }
+  h3 { font-size: 17px; color: #333; margin: 20px 0 8px; }
+  .subtitle { color: #666; font-size: 15px; margin-bottom: 32px; }
+  p { margin: 8px 0 12px; font-size: 15px; }
+  .card { background: #fff; border-radius: 10px; padding: 24px; margin: 16px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+  .highlight-box { background: #e8f4fd; border-left: 4px solid #1B5E8C; padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+  .warn-box { background: #fff8e1; border-left: 4px solid #f5a623; padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th { background: #1B5E8C; color: #fff; padding: 10px 12px; text-align: left; }
+  td { padding: 9px 12px; border-bottom: 1px solid #e0e0e0; }
+  tr:nth-child(even) { background: #f5f9fc; }
+  .diagram-wrap { background: #fff; border-radius: 10px; padding: 20px; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.07); overflow-x: auto; }
+  .diagram-title { font-weight: 700; font-size: 15px; color: #1B5E8C; margin-bottom: 12px; text-align: center; }
+  svg text { font-family: 'Segoe UI', Arial, sans-serif; }
+  .formula { font-family: 'Consolas', monospace; background: #f0f4f8; padding: 2px 8px; border-radius: 4px; }
+  ul { margin: 8px 0 12px 24px; font-size: 15px; }
+  li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Controlling 1,240m of LED Strip</h1>
+<p class="subtitle">Wave Pattern for Cove Lighting — System Architecture, Power Injection & Data Topology</p>
+
+<!-- ===================== SECTION 1: OVERVIEW ===================== -->
+<h2>1. System Scale at a Glance</h2>
+<div class="card">
+<table>
+  <tr><th style="width:55%">Parameter</th><th>Value</th></tr>
+  <tr><td>Total LED strip length</td><td><strong>1,240 m</strong></td></tr>
+  <tr><td>LED density (FCOB WS2811)</td><td>720 LEDs/m</td></tr>
+  <tr><td>Addressable ICs (WS2811, 1 per 36 LEDs)</td><td>20 ICs/m → <strong>24,800 segments</strong></td></tr>
+  <tr><td>Addressable segment size</td><td>50 mm (each segment = 36 LEDs)</td></tr>
+  <tr><td>Max power draw (full white)</td><td>1,240 m × 21 W/m = <strong>26,040 W</strong></td></tr>
+  <tr><td>Typical draw (flow/gradient ~40%)</td><td>~<strong>10,400 W</strong></td></tr>
+</table>
+</div>
+
+<!-- ===================== SECTION 2: ARCHITECTURE ===================== -->
+<h2>2. Multi-Controller Architecture</h2>
+<p>A single QuinLED-Dig-Octa Brainboard can drive ~2,000–3,000 addressable pixels at 40+ FPS. For 24,800 segments across 1,240m, the system is divided into <strong>zones</strong>, each managed by its own controller.</p>
+
+<div class="highlight-box">
+  <strong>Key formula:</strong><br>
+  <span class="formula">Controllers needed = Total segments ÷ Pixels per controller</span><br>
+  <span class="formula">24,800 ÷ 2,500 = ~10 Brainboards</span><br><br>
+  Each Brainboard has 8 outputs × ~300 segments each = 2,400 segments per board, covering ~124m of strip.
+</div>
+
+<div class="diagram-wrap">
+  <div class="diagram-title">Diagram 1 — Multi-Controller Zone Layout (1,240m)</div>
+  <svg viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:900px;display:block;margin:0 auto;">
+    <!-- Background -->
+    <rect x="0" y="0" width="900" height="420" fill="#fafcfe" rx="8"/>
+
+    <!-- Title -->
+    <text x="450" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#1B5E8C">ZONE ARCHITECTURE — 10 Controllers synchronized via WLED UDP Sync</text>
+
+    <!-- Network switch -->
+    <rect x="360" y="50" width="180" height="40" rx="6" fill="#1B5E8C"/>
+    <text x="450" y="75" text-anchor="middle" font-size="12" fill="#fff" font-weight="600">Wi-Fi Router / Switch</text>
+
+    <!-- Sync arrows down -->
+    <line x1="450" y1="90" x2="450" y2="115" stroke="#1B5E8C" stroke-width="2" marker-end="url(#arrowBlue)"/>
+    <text x="450" y="110" text-anchor="middle" font-size="10" fill="#666">UDP Sync (port 21324)</text>
+
+    <!-- Controllers row -->
+    <g id="controllers">
+      <!-- Controller 1 -->
+      <rect x="30" y="125" width="115" height="50" rx="6" fill="#2E86C1" opacity="0.9"/>
+      <text x="87" y="147" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">Dig-Octa #1</text>
+      <text x="87" y="163" text-anchor="middle" font-size="9" fill="#dce8f4">Zone A: 0–124m</text>
+      <line x1="87" y1="90" x2="87" y2="125" stroke="#1B5E8C" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+      <!-- Controller 2 -->
+      <rect x="160" y="125" width="115" height="50" rx="6" fill="#2E86C1" opacity="0.9"/>
+      <text x="217" y="147" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">Dig-Octa #2</text>
+      <text x="217" y="163" text-anchor="middle" font-size="9" fill="#dce8f4">Zone B: 124–248m</text>
+      <line x1="217" y1="90" x2="217" y2="125" stroke="#1B5E8C" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+      <!-- Controller 3 -->
+      <rect x="290" y="125" width="115" height="50" rx="6" fill="#2E86C1" opacity="0.9"/>
+      <text x="347" y="147" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">Dig-Octa #3</text>
+      <text x="347" y="163" text-anchor="middle" font-size="9" fill="#dce8f4">Zone C: 248–372m</text>
+      <line x1="347" y1="90" x2="347" y2="125" stroke="#1B5E8C" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+      <!-- dots -->
+      <text x="440" y="155" text-anchor="middle" font-size="20" fill="#999">• • •</text>
+
+      <!-- Controller 9 -->
+      <rect x="495" y="125" width="115" height="50" rx="6" fill="#2E86C1" opacity="0.9"/>
+      <text x="552" y="147" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">Dig-Octa #9</text>
+      <text x="552" y="163" text-anchor="middle" font-size="9" fill="#dce8f4">Zone I: 992–1116m</text>
+      <line x1="552" y1="90" x2="552" y2="125" stroke="#1B5E8C" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+      <!-- Controller 10 -->
+      <rect x="625" y="125" width="115" height="50" rx="6" fill="#2E86C1" opacity="0.9"/>
+      <text x="682" y="147" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">Dig-Octa #10</text>
+      <text x="682" y="163" text-anchor="middle" font-size="9" fill="#dce8f4">Zone J: 1116–1240m</text>
+      <line x1="682" y1="90" x2="682" y2="125" stroke="#1B5E8C" stroke-width="1.5" stroke-dasharray="4,3"/>
+    </g>
+
+    <!-- 8 output lines from Controller 1 -->
+    <text x="87" y="195" text-anchor="middle" font-size="10" fill="#1B5E8C" font-weight="600">8 Data Outputs</text>
+    <g stroke="#2E86C1" stroke-width="1.2">
+      <line x1="40" y1="175" x2="40" y2="215"/>
+      <line x1="52" y1="175" x2="52" y2="215"/>
+      <line x1="64" y1="175" x2="64" y2="215"/>
+      <line x1="76" y1="175" x2="76" y2="215"/>
+      <line x1="88" y1="175" x2="88" y2="215"/>
+      <line x1="100" y1="175" x2="100" y2="215"/>
+      <line x1="112" y1="175" x2="112" y2="215"/>
+      <line x1="124" y1="175" x2="124" y2="215"/>
+    </g>
+
+    <!-- LED strips from Controller 1 -->
+    <g>
+      <rect x="30" y="220" width="120" height="16" rx="3" fill="url(#grad1)" stroke="#ccc" stroke-width="0.5"/>
+      <text x="90" y="231" text-anchor="middle" font-size="8" fill="#fff" font-weight="600">8 × ~15.5m strips = 124m</text>
+    </g>
+
+    <!-- LED strip representation -->
+    <rect x="30" y="255" width="840" height="24" rx="4" fill="url(#waveGrad)" stroke="#aaa" stroke-width="0.5"/>
+    <text x="450" y="271" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">← 1,240m continuous cove light LED strip (wave pattern flows across all zones) →</text>
+
+    <!-- Wave pattern illustration -->
+    <text x="450" y="305" text-anchor="middle" font-size="12" font-weight="700" fill="#1B5E8C">Wave Pattern Propagation</text>
+    <svg x="30" y="315" width="840" height="80">
+      <path d="M0,40 C30,10 60,10 90,40 C120,70 150,70 180,40 C210,10 240,10 270,40 C300,70 330,70 360,40 C390,10 420,10 450,40 C480,70 510,70 540,40 C570,10 600,10 630,40 C660,70 690,70 720,40 C750,10 780,10 810,40" fill="none" stroke="#e74c3c" stroke-width="2.5" opacity="0.8"/>
+      <path d="M0,40 C30,10 60,10 90,40 C120,70 150,70 180,40 C210,10 240,10 270,40 C300,70 330,70 360,40 C390,10 420,10 450,40 C480,70 510,70 540,40 C570,10 600,10 630,40 C660,70 690,70 720,40 C750,10 780,10 810,40" fill="none" stroke="#3498db" stroke-width="2.5" opacity="0.6" stroke-dasharray="8,6" transform="translate(30,0)"/>
+      <path d="M0,40 C30,10 60,10 90,40 C120,70 150,70 180,40 C210,10 240,10 270,40 C300,70 330,70 360,40 C390,10 420,10 450,40 C480,70 510,70 540,40 C570,10 600,10 630,40 C660,70 690,70 720,40 C750,10 780,10 810,40" fill="none" stroke="#2ecc71" stroke-width="2.5" opacity="0.5" stroke-dasharray="4,8" transform="translate(60,0)"/>
+      <!-- Arrow showing direction -->
+      <polygon points="820,36 840,40 820,44" fill="#e74c3c" opacity="0.8"/>
+      <text x="420" y="75" text-anchor="middle" font-size="9" fill="#666">RGB color wave travels seamlessly across all 10 zones via WLED Sync</text>
+    </svg>
+
+    <!-- Gradient defs -->
+    <defs>
+      <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="#1B5E8C"/>
+      </marker>
+      <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#e74c3c"/><stop offset="25%" stop-color="#f39c12"/>
+        <stop offset="50%" stop-color="#2ecc71"/><stop offset="75%" stop-color="#3498db"/>
+        <stop offset="100%" stop-color="#9b59b6"/>
+      </linearGradient>
+      <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#e74c3c"/><stop offset="10%" stop-color="#e67e22"/>
+        <stop offset="20%" stop-color="#f1c40f"/><stop offset="30%" stop-color="#2ecc71"/>
+        <stop offset="40%" stop-color="#1abc9c"/><stop offset="50%" stop-color="#3498db"/>
+        <stop offset="60%" stop-color="#2980b9"/><stop offset="70%" stop-color="#9b59b6"/>
+        <stop offset="80%" stop-color="#e74c3c"/><stop offset="90%" stop-color="#e67e22"/>
+        <stop offset="100%" stop-color="#f1c40f"/>
+      </linearGradient>
+    </defs>
+  </svg>
+</div>
+
+<h3>How WLED Sync Creates a Seamless Wave</h3>
+<p>WLED's <strong>UDP Sync</strong> feature (port 21324) broadcasts the current effect state to all controllers on the same network. Each controller is assigned an <strong>offset</strong> value so the wave pattern continues seamlessly from one zone to the next, rather than each zone starting the same pattern independently.</p>
+<div class="highlight-box">
+  <strong>Offset calculation:</strong><br>
+  <span class="formula">Offset per zone = (Zone number × Segments per zone) ÷ Total segments × 255</span><br><br>
+  For 10 zones: Zone 1 = offset 0, Zone 2 = offset 26, Zone 3 = offset 51, ... Zone 10 = offset 230.<br>
+  This creates a continuous wave that flows across the full 1,240m installation.
+</div>
+
+<!-- ===================== SECTION 3: POWER INJECTION ===================== -->
+<h2>3. Power Injection Diagram</h2>
+<p>At 21 W/m and 24V, the current draw is <strong>0.875 A/m</strong>. On a 24V strip, voltage drop becomes significant after ~5m. Power must be <strong>injected every 5 meters</strong> to maintain consistent brightness and color accuracy.</p>
+
+<div class="card">
+<table>
+  <tr><th>Parameter</th><th>Value</th></tr>
+  <tr><td>Voltage</td><td>24V DC</td></tr>
+  <tr><td>Current per meter</td><td>0.875 A/m</td></tr>
+  <tr><td>Current per 5m segment</td><td>4.375 A</td></tr>
+  <tr><td>Max recommended run without injection</td><td>5 m</td></tr>
+  <tr><td>Power injection points for 1,240m</td><td><strong>248 injection points</strong> (every 5m)</td></tr>
+  <tr><td>PSUs needed (MeanWell XDR-120E-24, 5A)</td><td>~248 units (1 per 5m segment) or larger PSUs</td></tr>
+  <tr><td>Alternative: MeanWell RSP-320-24 (13.4A)</td><td>~82 units (1 per 15m / 3 injection points)</td></tr>
+</table>
+</div>
+
+<div class="diagram-wrap">
+  <div class="diagram-title">Diagram 2 — Power Injection per 5m LED Segment (Single Output Detail)</div>
+  <svg viewBox="0 0 880 340" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:880px;display:block;margin:0 auto;">
+    <rect x="0" y="0" width="880" height="340" fill="#fafcfe" rx="8"/>
+
+    <!-- PSU -->
+    <rect x="30" y="20" width="120" height="55" rx="6" fill="#f5a623" stroke="#d4911e" stroke-width="1.5"/>
+    <text x="90" y="42" text-anchor="middle" font-size="11" fill="#fff" font-weight="700">MeanWell PSU</text>
+    <text x="90" y="57" text-anchor="middle" font-size="9" fill="#fff">24V DC Output</text>
+
+    <!-- AC input -->
+    <text x="90" y="12" text-anchor="middle" font-size="9" fill="#999">AC 230V In ↓</text>
+
+    <!-- Main bus bar -->
+    <rect x="170" y="35" width="680" height="6" rx="2" fill="#e74c3c"/>
+    <text x="510" y="28" text-anchor="middle" font-size="10" fill="#e74c3c" font-weight="600">+24V Power Bus (heavy gauge wire, 12–14 AWG)</text>
+    <rect x="170" y="54" width="680" height="6" rx="2" fill="#333"/>
+    <text x="510" y="73" text-anchor="middle" font-size="10" fill="#333" font-weight="600">GND Return Bus</text>
+
+    <!-- Connection from PSU to bus -->
+    <line x1="150" y1="38" x2="170" y2="38" stroke="#e74c3c" stroke-width="2"/>
+    <line x1="150" y1="57" x2="170" y2="57" stroke="#333" stroke-width="2"/>
+
+    <!-- LED Strip -->
+    <rect x="170" y="110" width="680" height="20" rx="4" fill="url(#stripGrad)" stroke="#aaa" stroke-width="0.5"/>
+    <text x="510" y="124" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">LED Strip — 15.5m (one Dig-Octa output)</text>
+
+    <!-- Power injection points -->
+    <g id="injections">
+      <!-- Injection 1: 0m -->
+      <line x1="190" y1="60" x2="190" y2="110" stroke="#e74c3c" stroke-width="2"/>
+      <line x1="194" y1="60" x2="194" y2="110" stroke="#333" stroke-width="1.5"/>
+      <circle cx="190" cy="88" r="6" fill="#e74c3c" stroke="#fff" stroke-width="1.5"/>
+      <text x="190" y="91" text-anchor="middle" font-size="7" fill="#fff" font-weight="700">P</text>
+      <text x="190" y="145" text-anchor="middle" font-size="9" fill="#666">0m</text>
+
+      <!-- Injection 2: 5m -->
+      <line x1="410" y1="60" x2="410" y2="110" stroke="#e74c3c" stroke-width="2"/>
+      <line x1="414" y1="60" x2="414" y2="110" stroke="#333" stroke-width="1.5"/>
+      <circle cx="410" cy="88" r="6" fill="#e74c3c" stroke="#fff" stroke-width="1.5"/>
+      <text x="410" y="91" text-anchor="middle" font-size="7" fill="#fff" font-weight="700">P</text>
+      <text x="410" y="145" text-anchor="middle" font-size="9" fill="#666">5m</text>
+
+      <!-- Injection 3: 10m -->
+      <line x1="630" y1="60" x2="630" y2="110" stroke="#e74c3c" stroke-width="2"/>
+      <line x1="634" y1="60" x2="634" y2="110" stroke="#333" stroke-width="1.5"/>
+      <circle cx="630" cy="88" r="6" fill="#e74c3c" stroke="#fff" stroke-width="1.5"/>
+      <text x="630" y="91" text-anchor="middle" font-size="7" fill="#fff" font-weight="700">P</text>
+      <text x="630" y="145" text-anchor="middle" font-size="9" fill="#666">10m</text>
+
+      <!-- Injection 4: 15m -->
+      <line x1="830" y1="60" x2="830" y2="110" stroke="#e74c3c" stroke-width="2"/>
+      <line x1="834" y1="60" x2="834" y2="110" stroke="#333" stroke-width="1.5"/>
+      <circle cx="830" cy="88" r="6" fill="#e74c3c" stroke="#fff" stroke-width="1.5"/>
+      <text x="830" y="91" text-anchor="middle" font-size="7" fill="#fff" font-weight="700">P</text>
+      <text x="830" y="145" text-anchor="middle" font-size="9" fill="#666">15.5m</text>
+    </g>
+
+    <!-- Distance markers -->
+    <line x1="190" y1="152" x2="410" y2="152" stroke="#999" stroke-width="1" marker-end="url(#arrowGray)" marker-start="url(#arrowGrayL)"/>
+    <text x="300" y="163" text-anchor="middle" font-size="9" fill="#999">5m (max run between injections)</text>
+
+    <!-- Legend -->
+    <rect x="170" y="185" width="680" height="145" rx="6" fill="#f0f4f8" stroke="#ddd" stroke-width="1"/>
+    <text x="510" y="205" text-anchor="middle" font-size="12" font-weight="700" fill="#1B5E8C">Power Injection Wiring Detail</text>
+
+    <!-- Wire detail -->
+    <g transform="translate(190, 220)">
+      <!-- Strip cross-section -->
+      <rect x="0" y="20" width="300" height="14" rx="3" fill="#e8e8e8" stroke="#999" stroke-width="0.8"/>
+      <text x="150" y="30" text-anchor="middle" font-size="8" fill="#666">LED Strip PCB (12mm wide)</text>
+
+      <!-- +24V pad -->
+      <rect x="10" y="12" width="30" height="8" rx="2" fill="#e74c3c"/>
+      <text x="25" y="7" text-anchor="middle" font-size="8" fill="#e74c3c" font-weight="600">+24V</text>
+
+      <!-- Data pad -->
+      <rect x="135" y="12" width="30" height="8" rx="2" fill="#2E86C1"/>
+      <text x="150" y="7" text-anchor="middle" font-size="8" fill="#2E86C1" font-weight="600">DATA</text>
+
+      <!-- GND pad -->
+      <rect x="260" y="12" width="30" height="8" rx="2" fill="#333"/>
+      <text x="275" y="7" text-anchor="middle" font-size="8" fill="#333" font-weight="600">GND</text>
+
+      <!-- Solder points -->
+      <text x="150" y="50" text-anchor="middle" font-size="9" fill="#666">Solder or clip 18AWG wire to +24V and GND pads every 5m</text>
+
+      <!-- Right side: wire gauge guide -->
+      <text x="380" y="0" font-size="10" fill="#1B5E8C" font-weight="600">Recommended Wire Gauge:</text>
+      <text x="380" y="16" font-size="9" fill="#333">• Power bus (trunk): 12–14 AWG</text>
+      <text x="380" y="30" font-size="9" fill="#333">• Injection taps: 18 AWG</text>
+      <text x="380" y="44" font-size="9" fill="#333">• Data signal: 22–24 AWG (shielded)</text>
+    </g>
+
+    <defs>
+      <marker id="arrowGray" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
+        <polygon points="0 0, 6 2.5, 0 5" fill="#999"/>
+      </marker>
+      <marker id="arrowGrayL" markerWidth="6" markerHeight="5" refX="0" refY="2.5" orient="auto">
+        <polygon points="6 0, 0 2.5, 6 5" fill="#999"/>
+      </marker>
+      <linearGradient id="stripGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#e74c3c"/><stop offset="33%" stop-color="#2ecc71"/>
+        <stop offset="66%" stop-color="#3498db"/><stop offset="100%" stop-color="#9b59b6"/>
+      </linearGradient>
+    </defs>
+  </svg>
+</div>
+
+<div class="warn-box">
+  <strong>Important:</strong> Never daisy-chain power through the LED strip itself over long distances. Always run a parallel heavy-gauge power bus and tap into the strip at each injection point. This prevents the thin PCB traces from carrying excessive current.
+</div>
+
+<!-- ===================== SECTION 4: DATA INPUT ===================== -->
+<h2>4. Data Input Topology</h2>
+<p>The WS2811 data signal is a <strong>one-wire serial protocol</strong> at 800 kHz. Each Dig-Octa output sends data to one strip segment. The data signal only needs to connect at the <strong>start</strong> of each strip run.</p>
+
+<div class="diagram-wrap">
+  <div class="diagram-title">Diagram 3 — Data Input Wiring (Single Dig-Octa Controller → 8 Strip Outputs)</div>
+  <svg viewBox="0 0 880 400" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:880px;display:block;margin:0 auto;">
+    <rect x="0" y="0" width="880" height="400" fill="#fafcfe" rx="8"/>
+
+    <!-- Controller board -->
+    <rect x="340" y="20" width="200" height="80" rx="8" fill="#2E86C1" stroke="#1a6da3" stroke-width="2"/>
+    <text x="440" y="48" text-anchor="middle" font-size="13" fill="#fff" font-weight="700">QuinLED-Dig-Octa</text>
+    <text x="440" y="65" text-anchor="middle" font-size="10" fill="#dce8f4">Brainboard-32-8L</text>
+    <text x="440" y="80" text-anchor="middle" font-size="9" fill="#b0d4f1">ESP32 + WLED Firmware</text>
+
+    <!-- 8 data outputs -->
+    <g id="dataOutputs">
+      <!-- Output labels at top of lines -->
+      <text x="82" y="120" text-anchor="middle" font-size="8" fill="#2E86C1" font-weight="600">OUT 1</text>
+      <text x="192" y="120" text-anchor="middle" font-size="8" fill="#2E86C1" font-weight="600">OUT 2</text>
+      <text x="302" y="120" text-anchor="middle" font-size="8" fill="#2E86C1" font-weight="600">OUT 3</text>
+      <text x="412" y="120" text-anchor="middle" font-size="8" fill="#2E86C1" font-weight="600">OUT 4</text>
+      <text x="522" y="120" text-anchor="middle" font-size="8" fill="#2E86C1" font-weight="600">OUT 5</text>
+      <text x="632" y="120" text-anchor="middle" font-size="8" fill="#2E86C1" font-weight="600">OUT 6</text>
+      <text x="742" y="120" text-anchor="middle" font-size="8" fill="#2E86C1" font-weight="600">OUT 7</text>
+      <text x="830" y="120" text-anchor="middle" font-size="8" fill="#2E86C1" font-weight="600">OUT 8</text>
+
+      <!-- Data lines from controller to strips -->
+      <line x1="360" y1="100" x2="82" y2="128" stroke="#2E86C1" stroke-width="1.5"/>
+      <line x1="370" y1="100" x2="192" y2="128" stroke="#2E86C1" stroke-width="1.5"/>
+      <line x1="390" y1="100" x2="302" y2="128" stroke="#2E86C1" stroke-width="1.5"/>
+      <line x1="420" y1="100" x2="412" y2="128" stroke="#2E86C1" stroke-width="1.5"/>
+      <line x1="460" y1="100" x2="522" y2="128" stroke="#2E86C1" stroke-width="1.5"/>
+      <line x1="490" y1="100" x2="632" y2="128" stroke="#2E86C1" stroke-width="1.5"/>
+      <line x1="510" y1="100" x2="742" y2="128" stroke="#2E86C1" stroke-width="1.5"/>
+      <line x1="530" y1="100" x2="830" y2="128" stroke="#2E86C1" stroke-width="1.5"/>
+
+      <!-- Resistor symbols -->
+      <g transform="translate(72, 128)">
+        <rect width="20" height="10" rx="2" fill="#f5a623" stroke="#d4911e" stroke-width="0.8"/>
+        <text x="10" y="8" text-anchor="middle" font-size="6" fill="#fff">249R</text>
+      </g>
+      <g transform="translate(182, 128)">
+        <rect width="20" height="10" rx="2" fill="#f5a623" stroke="#d4911e" stroke-width="0.8"/>
+        <text x="10" y="8" text-anchor="middle" font-size="6" fill="#fff">249R</text>
+      </g>
+      <g transform="translate(292, 128)">
+        <rect width="20" height="10" rx="2" fill="#f5a623" stroke="#d4911e" stroke-width="0.8"/>
+        <text x="10" y="8" text-anchor="middle" font-size="6" fill="#fff">249R</text>
+      </g>
+      <g transform="translate(402, 128)">
+        <rect width="20" height="10" rx="2" fill="#f5a623" stroke="#d4911e" stroke-width="0.8"/>
+        <text x="10" y="8" text-anchor="middle" font-size="6" fill="#fff">249R</text>
+      </g>
+      <g transform="translate(512, 128)">
+        <rect width="20" height="10" rx="2" fill="#f5a623" stroke="#d4911e" stroke-width="0.8"/>
+        <text x="10" y="8" text-anchor="middle" font-size="6" fill="#fff">249R</text>
+      </g>
+      <g transform="translate(622, 128)">
+        <rect width="20" height="10" rx="2" fill="#f5a623" stroke="#d4911e" stroke-width="0.8"/>
+        <text x="10" y="8" text-anchor="middle" font-size="6" fill="#fff">249R</text>
+      </g>
+      <g transform="translate(732, 128)">
+        <rect width="20" height="10" rx="2" fill="#f5a623" stroke="#d4911e" stroke-width="0.8"/>
+        <text x="10" y="8" text-anchor="middle" font-size="6" fill="#fff">249R</text>
+      </g>
+      <g transform="translate(820, 128)">
+        <rect width="20" height="10" rx="2" fill="#f5a623" stroke="#d4911e" stroke-width="0.8"/>
+        <text x="10" y="8" text-anchor="middle" font-size="6" fill="#fff">249R</text>
+      </g>
+    </g>
+
+    <!-- 8 LED strips -->
+    <g id="ledStrips">
+      <rect x="32" y="148" width="100" height="140" rx="4" fill="url(#vStrip)" stroke="#ccc" stroke-width="0.8"/>
+      <text x="82" y="220" text-anchor="middle" font-size="9" fill="#fff" font-weight="600" transform="rotate(-90, 82, 220)">~15.5m strip (300 seg)</text>
+
+      <rect x="142" y="148" width="100" height="140" rx="4" fill="url(#vStrip2)" stroke="#ccc" stroke-width="0.8"/>
+      <text x="192" y="220" text-anchor="middle" font-size="9" fill="#fff" font-weight="600" transform="rotate(-90, 192, 220)">~15.5m strip (300 seg)</text>
+
+      <rect x="252" y="148" width="100" height="140" rx="4" fill="url(#vStrip3)" stroke="#ccc" stroke-width="0.8"/>
+      <text x="302" y="220" text-anchor="middle" font-size="9" fill="#fff" font-weight="600" transform="rotate(-90, 302, 220)">~15.5m strip (300 seg)</text>
+
+      <rect x="362" y="148" width="100" height="140" rx="4" fill="url(#vStrip)" stroke="#ccc" stroke-width="0.8"/>
+      <text x="412" y="220" text-anchor="middle" font-size="9" fill="#fff" font-weight="600" transform="rotate(-90, 412, 220)">~15.5m strip (300 seg)</text>
+
+      <rect x="472" y="148" width="100" height="140" rx="4" fill="url(#vStrip2)" stroke="#ccc" stroke-width="0.8"/>
+      <text x="522" y="220" text-anchor="middle" font-size="9" fill="#fff" font-weight="600" transform="rotate(-90, 522, 220)">~15.5m strip (300 seg)</text>
+
+      <rect x="582" y="148" width="100" height="140" rx="4" fill="url(#vStrip3)" stroke="#ccc" stroke-width="0.8"/>
+      <text x="632" y="220" text-anchor="middle" font-size="9" fill="#fff" font-weight="600" transform="rotate(-90, 632, 220)">~15.5m strip (300 seg)</text>
+
+      <rect x="692" y="148" width="100" height="140" rx="4" fill="url(#vStrip)" stroke="#ccc" stroke-width="0.8"/>
+      <text x="742" y="220" text-anchor="middle" font-size="9" fill="#fff" font-weight="600" transform="rotate(-90, 742, 220)">~15.5m strip (300 seg)</text>
+
+      <rect x="780" y="148" width="100" height="140" rx="4" fill="url(#vStrip2)" stroke="#ccc" stroke-width="0.8"/>
+      <text x="830" y="220" text-anchor="middle" font-size="9" fill="#fff" font-weight="600" transform="rotate(-90, 830, 220)">~15.5m strip (300 seg)</text>
+    </g>
+
+    <!-- Data direction arrows -->
+    <text x="82" y="300" text-anchor="middle" font-size="8" fill="#999">DATA ↓</text>
+    <text x="192" y="300" text-anchor="middle" font-size="8" fill="#999">DATA ↓</text>
+    <text x="302" y="300" text-anchor="middle" font-size="8" fill="#999">DATA ↓</text>
+    <text x="412" y="300" text-anchor="middle" font-size="8" fill="#999">DATA ↓</text>
+    <text x="522" y="300" text-anchor="middle" font-size="8" fill="#999">DATA ↓</text>
+    <text x="632" y="300" text-anchor="middle" font-size="8" fill="#999">DATA ↓</text>
+    <text x="742" y="300" text-anchor="middle" font-size="8" fill="#999">DATA ↓</text>
+    <text x="830" y="300" text-anchor="middle" font-size="8" fill="#999">DATA ↓</text>
+
+    <!-- Bottom summary -->
+    <rect x="30" y="318" width="820" height="70" rx="6" fill="#e8f4fd" stroke="#b3d9f2" stroke-width="1"/>
+    <text x="440" y="340" text-anchor="middle" font-size="11" font-weight="700" fill="#1B5E8C">Data Signal Rules</text>
+    <text x="440" y="356" text-anchor="middle" font-size="10" fill="#333">1. Data wire connects to DIN (Data In) pad at the START of each strip only</text>
+    <text x="440" y="370" text-anchor="middle" font-size="10" fill="#333">2. Keep data wire under 5m from controller to first LED — use shielded cable for longer runs</text>
+    <text x="440" y="384" text-anchor="middle" font-size="10" fill="#333">3. Each output has a 249Ω series resistor on the Dig-Octa board (built-in signal protection)</text>
+
+    <defs>
+      <linearGradient id="vStrip" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#e74c3c"/><stop offset="50%" stop-color="#3498db"/><stop offset="100%" stop-color="#2ecc71"/>
+      </linearGradient>
+      <linearGradient id="vStrip2" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#9b59b6"/><stop offset="50%" stop-color="#e74c3c"/><stop offset="100%" stop-color="#f1c40f"/>
+      </linearGradient>
+      <linearGradient id="vStrip3" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#2ecc71"/><stop offset="50%" stop-color="#f1c40f"/><stop offset="100%" stop-color="#e74c3c"/>
+      </linearGradient>
+    </defs>
+  </svg>
+</div>
+
+<!-- ===================== SECTION 5: FULL WIRING ===================== -->
+<h2>5. Complete Wiring — Single Zone (124m)</h2>
+
+<div class="diagram-wrap">
+  <div class="diagram-title">Diagram 4 — Full Wiring for One Zone: PSU → Controller → 8 Strips with Power Injection</div>
+  <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:880px;display:block;margin:0 auto;">
+    <rect x="0" y="0" width="880" height="300" fill="#fafcfe" rx="8"/>
+
+    <!-- AC Mains -->
+    <rect x="20" y="20" width="80" height="40" rx="4" fill="#666"/>
+    <text x="60" y="45" text-anchor="middle" font-size="9" fill="#fff" font-weight="600">AC 230V</text>
+
+    <!-- Arrow -->
+    <line x1="100" y1="40" x2="130" y2="40" stroke="#666" stroke-width="2" marker-end="url(#arrowDk)"/>
+
+    <!-- PSU Bank -->
+    <rect x="130" y="10" width="140" height="60" rx="6" fill="#f5a623" stroke="#d4911e" stroke-width="1.5"/>
+    <text x="200" y="32" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">PSU Bank</text>
+    <text x="200" y="46" text-anchor="middle" font-size="8" fill="#fff">Multiple XDR-120E-24</text>
+    <text x="200" y="58" text-anchor="middle" font-size="8" fill="#fff">in DIN rail enclosure</text>
+
+    <!-- 24V bus out -->
+    <line x1="270" y1="30" x2="320" y2="30" stroke="#e74c3c" stroke-width="2.5" marker-end="url(#arrowRed)"/>
+    <line x1="270" y1="50" x2="320" y2="50" stroke="#333" stroke-width="2" marker-end="url(#arrowDk)"/>
+    <text x="295" y="23" text-anchor="middle" font-size="7" fill="#e74c3c">+24V</text>
+    <text x="295" y="63" text-anchor="middle" font-size="7" fill="#333">GND</text>
+
+    <!-- Controller -->
+    <rect x="320" y="15" width="130" height="50" rx="6" fill="#2E86C1" stroke="#1a6da3" stroke-width="1.5"/>
+    <text x="385" y="36" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">Dig-Octa #N</text>
+    <text x="385" y="50" text-anchor="middle" font-size="8" fill="#dce8f4">ESP32 + WLED</text>
+
+    <!-- Wi-Fi icon -->
+    <text x="385" y="8" text-anchor="middle" font-size="10" fill="#2E86C1">📶 Wi-Fi (WLED Sync)</text>
+
+    <!-- 8 output lines going right -->
+    <g stroke="#2E86C1" stroke-width="1.2">
+      <line x1="450" y1="25" x2="490" y2="90"/>
+      <line x1="450" y1="28" x2="490" y2="115"/>
+      <line x1="450" y1="31" x2="490" y2="140"/>
+      <line x1="450" y1="34" x2="490" y2="165"/>
+      <line x1="450" y1="40" x2="490" y2="190"/>
+      <line x1="450" y1="43" x2="490" y2="215"/>
+      <line x1="450" y1="46" x2="490" y2="240"/>
+      <line x1="450" y1="49" x2="490" y2="265"/>
+    </g>
+
+    <!-- 8 LED strips with power injection marks -->
+    <g id="fullStrips">
+      <!-- Strip 1 -->
+      <rect x="490" y="84" width="370" height="18" rx="3" fill="url(#hStrip)" stroke="#ccc" stroke-width="0.5"/>
+      <text x="675" y="96" text-anchor="middle" font-size="7" fill="#fff">OUT 1: ~15.5m  ● P ——— ● P ——— ● P</text>
+
+      <rect x="490" y="109" width="370" height="18" rx="3" fill="url(#hStrip2)" stroke="#ccc" stroke-width="0.5"/>
+      <text x="675" y="121" text-anchor="middle" font-size="7" fill="#fff">OUT 2: ~15.5m  ● P ——— ● P ——— ● P</text>
+
+      <rect x="490" y="134" width="370" height="18" rx="3" fill="url(#hStrip)" stroke="#ccc" stroke-width="0.5"/>
+      <text x="675" y="146" text-anchor="middle" font-size="7" fill="#fff">OUT 3: ~15.5m  ● P ——— ● P ——— ● P</text>
+
+      <rect x="490" y="159" width="370" height="18" rx="3" fill="url(#hStrip2)" stroke="#ccc" stroke-width="0.5"/>
+      <text x="675" y="171" text-anchor="middle" font-size="7" fill="#fff">OUT 4: ~15.5m  ● P ——— ● P ——— ● P</text>
+
+      <rect x="490" y="184" width="370" height="18" rx="3" fill="url(#hStrip)" stroke="#ccc" stroke-width="0.5"/>
+      <text x="675" y="196" text-anchor="middle" font-size="7" fill="#fff">OUT 5: ~15.5m  ● P ——— ● P ——— ● P</text>
+
+      <rect x="490" y="209" width="370" height="18" rx="3" fill="url(#hStrip2)" stroke="#ccc" stroke-width="0.5"/>
+      <text x="675" y="221" text-anchor="middle" font-size="7" fill="#fff">OUT 6: ~15.5m  ● P ——— ● P ——— ● P</text>
+
+      <rect x="490" y="234" width="370" height="18" rx="3" fill="url(#hStrip)" stroke="#ccc" stroke-width="0.5"/>
+      <text x="675" y="246" text-anchor="middle" font-size="7" fill="#fff">OUT 7: ~15.5m  ● P ——— ● P ——— ● P</text>
+
+      <rect x="490" y="259" width="370" height="18" rx="3" fill="url(#hStrip2)" stroke="#ccc" stroke-width="0.5"/>
+      <text x="675" y="271" text-anchor="middle" font-size="7" fill="#fff">OUT 8: ~15.5m  ● P ——— ● P ——— ● P</text>
+    </g>
+
+    <!-- Power bus running alongside -->
+    <line x1="485" y1="84" x2="485" y2="277" stroke="#e74c3c" stroke-width="3"/>
+    <text x="480" y="82" text-anchor="end" font-size="8" fill="#e74c3c" font-weight="600">+24V Bus ↓</text>
+
+    <!-- Legend -->
+    <text x="865" y="92" text-anchor="end" font-size="7" fill="#e74c3c">● P = Power injection</text>
+    <text x="865" y="290" text-anchor="end" font-size="9" fill="#666">8 outputs × 15.5m = 124m per controller</text>
+
+    <defs>
+      <marker id="arrowDk" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
+        <polygon points="0 0, 6 2.5, 0 5" fill="#333"/>
+      </marker>
+      <marker id="arrowRed" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
+        <polygon points="0 0, 6 2.5, 0 5" fill="#e74c3c"/>
+      </marker>
+      <linearGradient id="hStrip" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#e74c3c"/><stop offset="33%" stop-color="#2ecc71"/>
+        <stop offset="66%" stop-color="#3498db"/><stop offset="100%" stop-color="#9b59b6"/>
+      </linearGradient>
+      <linearGradient id="hStrip2" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#3498db"/><stop offset="33%" stop-color="#f1c40f"/>
+        <stop offset="66%" stop-color="#e74c3c"/><stop offset="100%" stop-color="#2ecc71"/>
+      </linearGradient>
+    </defs>
+  </svg>
+</div>
+
+<!-- ===================== SECTION 6: SUMMARY ===================== -->
+<h2>6. Hardware Summary for 1,240m</h2>
+<div class="card">
+<table>
+  <tr><th style="width:55%">Component</th><th>Quantity</th></tr>
+  <tr><td>BTF-LIGHTING FCOB WS2811 RGB 24V strips (5m rolls)</td><td><strong>248 rolls</strong></td></tr>
+  <tr><td>QuinLED-Dig-Octa Brainboard-32-8L</td><td><strong>10 units</strong></td></tr>
+  <tr><td>QuinLED-Dig-Octa Power-5HV (24V powerboard)</td><td><strong>10 units</strong></td></tr>
+  <tr><td>MeanWell XDR-120E-24 (120W PSU) — for typical gradient use</td><td><strong>~110 units</strong> *</td></tr>
+  <tr><td>Wi-Fi access points (for WLED sync coverage)</td><td>As needed for site</td></tr>
+  <tr><td>DIN rail enclosures</td><td>10–12 enclosures</td></tr>
+  <tr><td>Power injection connectors</td><td>~500 sets</td></tr>
+</table>
+<p style="font-size:13px;color:#666;margin-top:8px;">* PSU count assumes ~40% average brightness for gradient/flow effects. For full-white capability, scale to ~220 units.</p>
+</div>
+
+<div class="highlight-box">
+  <strong>Key takeaway:</strong> The wave pattern works by dividing 1,240m into 10 zones of ~124m each. Each zone is driven by one Dig-Octa controller with 8 parallel strip outputs. WLED's UDP Sync broadcasts effect timing across all 10 controllers over Wi-Fi, with per-controller offsets creating a continuous wave that flows seamlessly across the entire installation.
+</div>
+
+</div>
+</body>
+</html>
